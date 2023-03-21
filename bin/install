@@ -6,6 +6,14 @@ install_php() {
   local install_type=$1
   local version=$2
   local install_path=$3
+
+  packages=$(paru -Ssa "php${version}" |
+    grep -E 'aur/php([0-9]+)-' |
+    sed -E 's,aur/php([^ ]+).*,php\1,')
+
+  # shellcheck disable=2086
+  paru -S --noconfirm --needed $packages
+
   mkdir -p "$install_path/bin"
 
   ln -s "/usr/bin/php${version}" "$install_path/bin/php"
@@ -18,12 +26,6 @@ install_php() {
   ln -s "/usr/bin/php-config${version}" "$install_path/bin/php-config"
   ln -s "/usr/bin/phpize${version}" "$install_path/bin/phpize"
 
-  packages=$(paru -Ssa "php${version}" |
-    grep -E 'aur/php([0-9]+)-' |
-    sed -E 's,aur/php([^ ]+).*,php\1,')
-
-  # shellcheck disable=2086
-  paru -S --noconfirm --needed $packages
 }
 
 install_composer() {
