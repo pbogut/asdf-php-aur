@@ -1,0 +1,40 @@
+#!/usr/bin/env bash
+
+set -eo pipefail
+
+install_php() {
+  local install_type=$1
+  local version=$2
+  local install_path=$3
+  mkdir -p "$install_path/bin"
+
+  ln -s "/usr/bin/php${version}" "$install_path/bin/php"
+  ln -s "/usr/bin/phar${version}" "$install_path/bin/phar"
+  ln -s "/usr/bin/phar${version}.phar" "$install_path/bin/phar.phar"
+  ln -s "/usr/bin/pecl${version}" "$install_path/bin/pecl"
+  ln -s "/usr/bin/pear${version}" "$install_path/bin/pear"
+  ln -s "/usr/bin/peardev${version}" "$install_path/bin/peardev"
+  ln -s "/usr/bin/php-cgi${version}" "$install_path/bin/php-cgi"
+  ln -s "/usr/bin/php-config${version}" "$install_path/bin/php-config"
+  ln -s "/usr/bin/phpize${version}" "$install_path/bin/phpize"
+
+  packages=$(paru -Ssa "php${version}" |
+    grep -E 'aur/php([0-9]+)-' |
+    sed -E 's,aur/php([^ ]+).*,php\1,')
+
+  # shellcheck disable=2086
+  paru -S --noconfirm --needed $packages
+}
+
+install_composer() {
+  local bin_path=$1/bin
+  local expected_signature="$(curl -sL https://composer.github.io/installer.sig)"
+
+  $bin_path/php -r "copy('https://getcomposer.org/installer', 'composer-setup.php');"
+  $bin_path/php -r "if (hash_file('sha384', 'composer-setup.php') === '${expected_signature}') { echo 'Installer verified'; } else { echo 'Installer corrupt'; unlink('composer-setup.php'); } echo PHP_EOL;"
+  $bin_path/php composer-setup.php --install-dir=$bin_path --filename=composer
+  $bin_path/php -r "unlink('composer-setup.php');"
+}
+
+install_php "$ASDF_INSTALL_TYPE" "$ASDF_INSTALL_VERSION" "$ASDF_INSTALL_PATH"
+install_composer "$ASDF_INSTALL_PATH"
