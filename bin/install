@@ -2,32 +2,66 @@
 
 set -eo pipefail
 
+install_filter_packages() {
+  filters=$1
+  version=$2
+  if [[ -z $filters ]]; then
+    cat
+  elif [[ $filters == "all" ]] || [[ $filters == '*' ]]; then
+    grep -v '.*'
+    echo "aur/php${version}"
+  else
+    echo "$filters" >>/tmp/filters
+    filters=${filters//[^a-zA-Z0-9,_-]/}
+    filters="\<${filters//,/\\>\\|\\<}\>"
+    echo "$filters" >>/tmp/filters
+    grep -v "${filters}"
+  fi
+}
+
 install_php() {
+  # shellcheck disable=2034
   local install_type=$1
   local version=$2
   local install_path=$3
 
   packages=$(paru -Ssa "php${version}" |
     grep -E 'aur/php([0-9]+)-' |
+    tee -a /tmp/packages |
+    install_filter_packages "$PHP_IGNORE_MODULES" "$version" |
     sed -E 's,aur/php([^ ]+).*,php\1,')
+
+  echo "=> Installing packages using paru:"
 
   # shellcheck disable=2086
   paru -S --noconfirm --needed $packages
 
+  echo "=> Creating symlinks for php binaries:"
+
   mkdir -p "$install_path/bin"
 
-  ln -s "/usr/bin/php${version}" "$install_path/bin/php"
-  ln -s "/usr/bin/phar${version}" "$install_path/bin/phar"
-  ln -s "/usr/bin/phar${version}.phar" "$install_path/bin/phar.phar"
-  ln -s "/usr/bin/pecl${version}" "$install_path/bin/pecl"
-  ln -s "/usr/bin/pear${version}" "$install_path/bin/pear"
-  ln -s "/usr/bin/peardev${version}" "$install_path/bin/peardev"
-  ln -s "/usr/bin/php-cgi${version}" "$install_path/bin/php-cgi"
-  ln -s "/usr/bin/php-config${version}" "$install_path/bin/php-config"
-  ln -s "/usr/bin/phpize${version}" "$install_path/bin/phpize"
+  links_todo=(
+    "php[version]"
+    "phar[version]"
+    "phar[version].phar"
+    "pecl[version]"
+    "pear[version]"
+    "peardev[version]"
+    "php-cgi[version]"
+    "php-config[version]"
+    "phpize[version]"
+  )
 
+  for link in "${links_todo[@]}"; do
+    src="/usr/bin/${link//\[version\]/$version}"
+    if [[ -f "$src" ]]; then
+      echo ":: ${link//\[version\]/}"
+      dst="$install_path/bin/${link//\[version\]/}"
+      ln -s "$src" "$dst"
+    fi
+  done
 
-
+  echo "=> Finished installing php $version"
 }
 
 install_php "$ASDF_INSTALL_TYPE" "$ASDF_INSTALL_VERSION" "$ASDF_INSTALL_PATH"
