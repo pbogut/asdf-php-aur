@@ -2,41 +2,37 @@
 
 set -eo pipefail
 
-install_filter_packages() {
-  filters=$1
-  version=$2
-  if [[ -z $filters ]]; then
-    cat
-  elif [[ $filters == "all" ]] || [[ $filters == '*' ]]; then
-    grep -v '.*'
-    echo "aur/php${version}"
-  else
-    echo "$filters" >>/tmp/filters
-    filters=${filters//[^a-zA-Z0-9,_-]/}
-    filters="\<${filters//,/\\>\\|\\<}\>"
-    echo "$filters" >>/tmp/filters
-    grep -v "${filters}"
-  fi
-}
-
 install_php() {
   # shellcheck disable=2034
   local install_type=$1
   local version=$2
   local install_path=$3
+  local build_path="$HOME/.share/php-aur/build"
+  mkdir -p "$build_path"
 
-  packages=$(paru -Ssa "php${version}" |
-    grep -E 'aur/php([0-9]+)-' |
-    tee -a /tmp/packages |
-    install_filter_packages "$PHP_IGNORE_MODULES" "$version" |
-    sed -E 's,aur/php([^ ]+).*,php\1,')
+  echo "=> Download php${version} build from aur" > /dev/stderr
+  cd "$build_path" || exit 1
+  curl -L -O "https://aur.archlinux.org/cgit/aur.git/snapshot/php${version}.tar.gz"
 
-  echo "=> Installing packages using paru:"
+  echo "=> Unpack php${version}.tar.gz" > /dev/stderr
+  tar xvf "php${version}.tar.gz"
 
-  # shellcheck disable=2086
-  paru -S --noconfirm --needed $packages
+  if [[ -f "$build_path/php$version/.php-aur-completed" ]]; then
+    echo "=> Already installed php $version, skipping build" > /dev/stderr
+    echo "   If you would like to rebulid it anyway please remove build path:" > /dev/stderr
+    echo "   rm -fr $build_path/php$version" > /dev/stderr
+  fi
+  if [[ ! -f "$build_path/php$version/.php-aur-completed" ]]; then
+    echo "=> Run makepkg..." > /dev/stderr
+    cd "php${version}" || exit 1
+    makepkg --log --nocheck
+    touch .php-aur-completed
+  fi
 
-  echo "=> Creating symlinks for php binaries:"
+  echo "=> Install packages using pacman" > /dev/stderr
+  sudo pacman -U --noconfirm "$build_path/php$version/php$version"*".pkg.tar.zst"
+
+  echo "=> Creating symlinks for php binaries:" > /dev/stderr
 
   mkdir -p "$install_path/bin"
 
@@ -55,13 +51,20 @@ install_php() {
   for link in "${links_todo[@]}"; do
     src="/usr/bin/${link//\[version\]/$version}"
     if [[ -f "$src" ]]; then
-      echo ":: ${link//\[version\]/}"
+      echo ":: ${link//\[version\]/}" > /dev/stderr
       dst="$install_path/bin/${link//\[version\]/}"
       ln -s "$src" "$dst"
     fi
   done
 
-  echo "=> Finished installing php $version"
+  for link in "${links_todo[@]}"; do
+    src="/usr/bin/${link//\[version\]/$version}"
+    if [[ ! -f "$src" ]]; then
+      echo ":: $src is missing, skipping"  > /dev/stderr
+    fi
+  done
+
+  echo "=> Finished installing php $version" > /dev/stdout
 }
 
 install_php "$ASDF_INSTALL_TYPE" "$ASDF_INSTALL_VERSION" "$ASDF_INSTALL_PATH"
