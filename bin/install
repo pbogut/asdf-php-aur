@@ -25,17 +25,7 @@ install_php() {
   local version=$2
   local install_path=$3
 
-  packages=$(paru -Ssa "php${version}" |
-    grep -E 'aur/php([0-9]+)-' |
-    tee -a /tmp/packages |
-    install_filter_packages "$PHP_IGNORE_MODULES" "$version" |
-    sed -E 's,aur/php([^ ]+).*,php\1,')
-
-  echo "=> Installing packages using paru:"
-
-  # shellcheck disable=2086
-  paru -S --noconfirm --needed $packages
-
+  echo "=> Skip installation, you should install it yourself from aur"
   echo "=> Creating symlinks for php binaries:"
 
   mkdir -p "$install_path/bin"
